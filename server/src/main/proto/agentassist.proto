@@ -1,0 +1,314 @@
+syntax = "proto3";
+
+package agentassistproto;
+
+option java_package = "com.agentassistant.proto";
+option java_multiple_files = true;
+option go_package = "github.com/yangjuncode/agentassistant/agentassistproto";
+
+// TextContent represents text provided to or from an LLM.
+// It must have Type set to "text".
+message TextContent {
+  string type = 1; // Must be "text"
+  string text = 2; // The text content
+}
+
+// ImageContent represents an image provided to or from an LLM.
+// It must have Type set to "image".
+message ImageContent {
+  string type = 1;      // Must be "image"
+  string data = 2;      // Base64-encoded image data
+  string mime_type = 3; // MIME type of the image
+}
+
+// AudioContent represents audio data provided to or from an LLM.
+// It must have Type set to "audio".
+message AudioContent {
+  string type = 1;      // Must be "audio"
+  string data = 2;      // Base64-encoded audio data
+  string mime_type = 3; // MIME type of the audio
+}
+
+// EmbeddedResource represents a resource embedded into a prompt or tool call
+// result. It must have Type set to "embedded_resource".
+message EmbeddedResource {
+  string type = 1;      // Must be "embedded_resource"
+  string uri = 2;       // URI of the embedded resource
+  string mime_type = 3; // MIME type of the resource
+  bytes data = 4;       // Optional: The actual resource data
+}
+
+message McpResultContent {
+   //content type
+   // 1: text
+   // 2: image
+   // 3: audio
+   // 4: embedded resource
+   int32 type = 1;
+  // text
+  TextContent text = 2;
+  // image
+  ImageContent image = 3;
+  // audio
+  AudioContent audio = 4;
+  // embedded resource
+  EmbeddedResource embedded_resource = 5;
+}
+
+message MsgEmpty {
+  
+}
+
+message McpAskQuestionRequest {
+  // current project directory
+  string ProjectDirectory = 1;
+  // ai agent's question
+  string Question = 2;
+  // timeout in seconds, default is 600s
+  int32 Timeout = 3;
+}
+
+message AskQuestionRequest {
+  // request id
+  string ID = 1;
+  // user token
+  string UserToken = 2;
+  // ai agent's question
+  McpAskQuestionRequest Request = 3;
+}
+
+message AskQuestionResponse {
+  // request id
+  string ID = 1;
+  bool IsError = 2;
+  map<string, string> Meta = 3;
+  repeated McpResultContent contents = 4;
+}
+
+message McpTaskFinishRequest {
+  // current project directory
+  string ProjectDirectory = 1;
+  // ai agent's summary
+  string Summary = 2;
+  // timeout in seconds, default is 600s
+  int32 Timeout = 3;
+}
+
+message TaskFinishRequest {
+  // request id
+  string ID = 1;
+  // user token
+  string UserToken = 2;
+  // ai agent's summary
+  McpTaskFinishRequest Request = 3;
+}
+
+message TaskFinishResponse {
+  // request id
+  string ID = 1;
+  bool IsError = 2;
+  map<string, string> Meta = 3;
+  repeated McpResultContent contents = 4;
+}
+
+message CheckMessageValidityRequest {
+  // list of request IDs to check
+  repeated string request_ids = 1;
+}
+
+message CheckMessageValidityResponse {
+  // map of request ID to validity status
+  map<string, bool> validity = 1;
+}
+
+// GetPendingMessagesRequest represents a request to get all pending messages for a user
+message GetPendingMessagesRequest {
+  // user token to filter messages
+  string user_token = 1;
+}
+
+// PendingMessage represents a single pending message
+message PendingMessage {
+  // message type: "AskQuestion" or "TaskFinish"
+  string message_type = 1;
+  // ask question request (if message_type is "AskQuestion")
+  AskQuestionRequest ask_question_request = 2;
+  // task finish request (if message_type is "TaskFinish")
+  TaskFinishRequest task_finish_request = 3;
+  // timestamp when the message was created
+  int64 created_at = 4;
+  // timeout in seconds
+  int32 timeout = 5;
+}
+
+// GetPendingMessagesResponse represents the response containing all pending messages
+message GetPendingMessagesResponse {
+  // list of pending messages
+  repeated PendingMessage pending_messages = 1;
+  // total count of pending messages
+  int32 total_count = 2;
+}
+
+// RequestCancelledNotification represents a notification that a request has been cancelled
+message RequestCancelledNotification {
+  // request id that was cancelled
+  string request_id = 1;
+  // reason for cancellation
+  string reason = 2;
+  // message type: "AskQuestion" or "TaskFinish"
+  string message_type = 3;
+}
+
+// OnlineUser represents an online user with the same token
+message OnlineUser {
+  // client id
+  string client_id = 1;
+  // user nickname
+  string nickname = 2;
+  // connection timestamp
+  int64 connected_at = 3;
+}
+
+// GetOnlineUsersRequest represents a request to get online users with the same token
+message GetOnlineUsersRequest {
+  // user token to filter users
+  string user_token = 1;
+}
+
+// GetOnlineUsersResponse represents the response containing online users
+message GetOnlineUsersResponse {
+  // list of online users
+  repeated OnlineUser online_users = 1;
+  // total count of online users
+  int32 total_count = 2;
+}
+
+// ChatMessage represents a chat message between users
+message ChatMessage {
+  // message id
+  string message_id = 1;
+  // sender client id
+  string sender_client_id = 2;
+  // sender nickname
+  string sender_nickname = 3;
+  // receiver client id
+  string receiver_client_id = 4;
+  // receiver nickname
+  string receiver_nickname = 5;
+  // message content
+  string content = 6;
+  // timestamp when the message was sent
+  int64 sent_at = 7;
+}
+
+// SendChatMessageRequest represents a request to send a chat message
+message SendChatMessageRequest {
+  // receiver client id
+  string receiver_client_id = 1;
+  // message content
+  string content = 2;
+}
+
+// ChatMessageNotification represents a notification of a new chat message
+message ChatMessageNotification {
+  // the chat message
+  ChatMessage chat_message = 1;
+}
+
+// UserLoginResponse represents the response to a user login
+message UserLoginResponse {
+  // client id assigned by server
+  string client_id = 1;
+  // success status
+  bool success = 2;
+  // error message if login failed
+  string error_message = 3;
+}
+
+// UserConnectionStatusNotification represents a notification when a user connects or disconnects
+message UserConnectionStatusNotification {
+  // the user who connected/disconnected
+  OnlineUser user = 1;
+  // connection status: "connected" or "disconnected"
+  string status = 2;
+  // timestamp of the status change
+  int64 timestamp = 3;
+}
+
+
+
+message WebsocketMessage {
+  // WebsocketMessage cmd
+  // AskQuestion: mcp ask_question
+  // TaskFinish: mcp task_finish
+  // AskQuestionReply: user ask_question reply
+  // TaskFinishReply: user task_finish reply
+  // UserLogin: user login, str param is user token, nickname is user nickname
+  // AskQuestionReplyNotification: notification of an AskQuestionReply
+  // TaskFinishReplyNotification: notification of a TaskFinishReply
+  // CheckMessageValidity: check if messages are still valid
+  // GetPendingMessages: get all pending messages for a user
+  // RequestCancelled: notification that a request has been cancelled
+  // GetOnlineUsers: get online users with the same token
+  // SendChatMessage: send a chat message to another user
+  // ChatMessageNotification: notification of a new chat message
+  string Cmd = 1;
+
+  //ask question
+  AskQuestionRequest AskQuestionRequest = 2;
+
+  //task finish
+  TaskFinishRequest TaskFinishRequest = 3;
+
+  // ask question reply
+  AskQuestionResponse AskQuestionResponse = 4;
+
+  // task finish reply
+  TaskFinishResponse TaskFinishResponse = 5;
+
+  // check message validity
+  CheckMessageValidityRequest CheckMessageValidityRequest = 13;
+
+  // check message validity response
+  CheckMessageValidityResponse CheckMessageValidityResponse = 14;
+
+  // get pending messages request
+  GetPendingMessagesRequest GetPendingMessagesRequest = 15;
+
+  // get pending messages response
+  GetPendingMessagesResponse GetPendingMessagesResponse = 16;
+
+  // request cancelled notification
+  RequestCancelledNotification RequestCancelledNotification = 17;
+
+  // get online users request
+  GetOnlineUsersRequest GetOnlineUsersRequest = 19;
+
+  // get online users response
+  GetOnlineUsersResponse GetOnlineUsersResponse = 20;
+
+  // send chat message request
+  SendChatMessageRequest SendChatMessageRequest = 21;
+
+  // chat message notification
+  ChatMessageNotification ChatMessageNotification = 22;
+
+  // user login response
+  UserLoginResponse UserLoginResponse = 23;
+
+  // user connection status notification
+  UserConnectionStatusNotification UserConnectionStatusNotification = 24;
+
+  //str param
+  string StrParam = 12;
+
+  // user nickname (for UserLogin and notifications)
+  string Nickname = 18;
+}
+
+service SrvAgentAssist {
+  rpc AskQuestion(AskQuestionRequest) returns (AskQuestionResponse);
+  rpc TaskFinish(TaskFinishRequest) returns (TaskFinishResponse);
+}
+
+// WebsocketMessage defines the message structure for WebSocket communication
