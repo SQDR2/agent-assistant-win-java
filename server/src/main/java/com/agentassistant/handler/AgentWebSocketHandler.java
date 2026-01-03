@@ -22,10 +22,24 @@ public class AgentWebSocketHandler extends BinaryWebSocketHandler {
   // Key: Request ID, Value: CompletableFuture
   private final ConcurrentHashMap<String, CompletableFuture<WebsocketMessage>> pendingRequests = new ConcurrentHashMap<>();
 
+  private final java.util.concurrent.CompletableFuture<Void> connectionFuture = new java.util.concurrent.CompletableFuture<>();
+
   @Override
   public void afterConnectionEstablished(WebSocketSession session) throws Exception {
     sessions.put(session.getId(), session);
     System.err.println("Client connected: " + session.getId());
+    connectionFuture.complete(null);
+  }
+
+  public void waitForConnection(long timeout, java.util.concurrent.TimeUnit unit) {
+    if (!sessions.isEmpty()) return;
+    try {
+      System.err.println("Waiting for client connection...");
+      connectionFuture.get(timeout, unit);
+      System.err.println("Client connected, proceeding.");
+    } catch (Exception e) {
+      System.err.println("Timeout waiting for client connection: " + e.getMessage());
+    }
   }
 
   @Override
@@ -61,10 +75,15 @@ public class AgentWebSocketHandler extends BinaryWebSocketHandler {
     for (WebSocketSession session : sessions.values()) {
       if (session.isOpen()) {
         try {
+          System.err.println("Sending WebSocket message to session: " + session.getId() + ", Cmd: " + message.getCmd());
           session.sendMessage(new BinaryMessage(message.toByteArray()));
+          System.err.println("Sent successfully.");
         } catch (IOException e) {
+          System.err.println("Error sending to session " + session.getId() + ": " + e.getMessage());
           e.printStackTrace();
         }
+      } else {
+        System.err.println("Session " + session.getId() + " is closed, skipping.");
       }
     }
   }

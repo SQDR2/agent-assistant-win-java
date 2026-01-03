@@ -11,21 +11,29 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final TextEditingController _urlController = TextEditingController(text: "ws://localhost:8080/ws");
-  final TextEditingController _tokenController = TextEditingController(text: "test-token");
+  final TextEditingController _urlController =
+      TextEditingController(text: "ws://localhost:8080/ws");
+  final TextEditingController _tokenController =
+      TextEditingController(text: "test-token");
 
   @override
   void initState() {
     super.initState();
     // Listen for incoming requests
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<WebSocketService>().requestStream.listen((message) {
+      final wsService = context.read<WebSocketService>();
+      wsService.requestStream.listen((message) {
         if (message.hasAskQuestionRequest()) {
           _showAskQuestionDialog(message.askQuestionRequest);
         } else if (message.hasTaskFinishRequest()) {
           _showTaskFinishDialog(message.taskFinishRequest);
         }
       });
+
+      // Auto-connect on startup
+      if (!wsService.isConnected) {
+        wsService.connect(_urlController.text, _tokenController.text);
+      }
     });
   }
 
@@ -64,10 +72,7 @@ class _HomePageState extends State<HomePage> {
                     ..type = 1 // Text
                     ..text = (TextContent()
                       ..type = "text"
-                      ..text = answerController.text
-                    )
-                  )
-                );
+                      ..text = answerController.text)));
               context.read<WebSocketService>().sendReply(reply);
               Navigator.of(context).pop();
             },
@@ -90,7 +95,8 @@ class _HomePageState extends State<HomePage> {
           children: [
             const Text("The agent has finished the task:"),
             const SizedBox(height: 8),
-            Text(request.request.summary, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(request.request.summary,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -105,10 +111,7 @@ class _HomePageState extends State<HomePage> {
                     ..type = 1 // Text
                     ..text = (TextContent()
                       ..type = "text"
-                      ..text = "Acknowledged"
-                    )
-                  )
-                );
+                      ..text = "Acknowledged")));
               context.read<WebSocketService>().sendReply(reply);
               Navigator.of(context).pop();
             },
@@ -164,11 +167,16 @@ class _HomePageState extends State<HomePage> {
                       child: FilledButton.icon(
                         onPressed: wsService.isConnected
                             ? wsService.disconnect
-                            : () => wsService.connect(_urlController.text, _tokenController.text),
-                        icon: Icon(wsService.isConnected ? Icons.link_off : Icons.link),
-                        label: Text(wsService.isConnected ? "Disconnect" : "Connect"),
+                            : () => wsService.connect(
+                                _urlController.text, _tokenController.text),
+                        icon: Icon(wsService.isConnected
+                            ? Icons.link_off
+                            : Icons.link),
+                        label: Text(
+                            wsService.isConnected ? "Disconnect" : "Connect"),
                         style: FilledButton.styleFrom(
-                          backgroundColor: wsService.isConnected ? Colors.red : null,
+                          backgroundColor:
+                              wsService.isConnected ? Colors.red : null,
                         ),
                       ),
                     ),
@@ -177,7 +185,8 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: 24),
-            Text("Status: ${wsService.status}", style: Theme.of(context).textTheme.titleMedium),
+            Text("Status: ${wsService.status}",
+                style: Theme.of(context).textTheme.titleMedium),
             const Divider(),
             const Expanded(
               child: Center(

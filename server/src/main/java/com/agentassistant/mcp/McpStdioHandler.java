@@ -25,15 +25,26 @@ public class McpStdioHandler implements CommandLineRunner {
   @org.springframework.beans.factory.annotation.Autowired
   private org.springframework.core.env.Environment environment;
 
+  private java.io.PrintWriter stdoutWriter;
+
   @Override
   public void run(String... args) throws Exception {
+    // Force UTF-8 for stdout and stderr
+    System.setErr(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), true, "UTF-8"));
+    stdoutWriter = new java.io.PrintWriter(new java.io.OutputStreamWriter(System.out, java.nio.charset.StandardCharsets.UTF_8), true);
+    
+    // Check port
     String port = environment.getProperty("local.server.port");
-    System.err.println("McpStdioHandler running. Web Server port: " + port);
+    log("McpStdioHandler running. Web Server port: " + port);
     
     new Thread(this::readStdio).start();
     
     // Attempt to start the client
     startClient();
+  }
+
+  private void log(String message) {
+     System.err.println(message);
   }
 
   private void startClient() {
@@ -51,44 +62,45 @@ public class McpStdioHandler implements CommandLineRunner {
         };
 
         java.io.File clientExe = null;
-        System.err.println("Searching for client executable...");
-        System.err.println("Current working directory: " + System.getProperty("user.dir"));
+        log("Searching for client executable...");
+        log("Current working directory: " + System.getProperty("user.dir"));
 
         for (String path : possiblePaths) {
             java.io.File f = new java.io.File(path);
-            System.err.println("Checking path: " + f.getAbsolutePath());
+            log("Checking path: " + f.getAbsolutePath());
             if (f.exists()) {
                 clientExe = f;
-                System.err.println("Found client at: " + f.getAbsolutePath());
+                log("Found client at: " + f.getAbsolutePath());
                 break;
             }
         }
 
         if (clientExe != null) {
             // Start the client process
-            System.err.println("Starting client process...");
+            log("Starting client process...");
             new ProcessBuilder(clientExe.getAbsolutePath())
                 .start();
-            System.err.println("Client process started.");
+            log("Client process started.");
         } else {
-            System.err.println("Could not find client executable in any of the expected locations.");
+            log("Could not find client executable in any of the expected locations.");
         }
     } catch (Exception e) {
         // Ignore errors starting client, we don't want to crash or pollute stdout if we can avoid it
         // Since logging is off for stdout, we could log to stderr if needed
-        System.err.println("Failed to auto-launch client: " + e.getMessage());
+        log("Failed to auto-launch client: " + e.getMessage());
         e.printStackTrace();
     }
   }
 
   private void readStdio() {
-    try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
+    try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8))) {
       String line;
       while ((line = reader.readLine()) != null) {
+        log("Received MCP request: " + line);
         try {
           handleJsonRpc(line);
         } catch (Exception e) {
-          System.err.println("Error handling JSON-RPC: " + e.getMessage());
+          log("Error handling JSON-RPC: " + e.getMessage());
         }
       }
     } catch (Exception e) {
@@ -102,7 +114,7 @@ public class McpStdioHandler implements CommandLineRunner {
 
       if (request.has("method")) {
         String method = request.get("method").getAsString();
-        String id = request.has("id") ? request.get("id").getAsString() : null;
+        JsonElement id = request.get("id");
 
         if ("initialize".equals(method)) {
           handleInitialize(id);
@@ -121,10 +133,10 @@ public class McpStdioHandler implements CommandLineRunner {
     }
   }
 
-  private void handleInitialize(String id) {
+  private void handleInitialize(JsonElement id) {
     JsonObject response = new JsonObject();
     response.addProperty("jsonrpc", "2.0");
-    response.addProperty("id", id);
+    if (id != null) response.add("id", id);
 
     JsonObject result = new JsonObject();
     result.addProperty("protocolVersion", "2024-11-05");
@@ -139,13 +151,13 @@ public class McpStdioHandler implements CommandLineRunner {
     result.add("capabilities", capabilities);
 
     response.add("result", result);
-    System.out.println(gson.toJson(response));
+    sendResponse(response);
   }
 
-  private void handleToolsList(String id) {
+  private void handleToolsList(JsonElement id) {
     JsonObject response = new JsonObject();
     response.addProperty("jsonrpc", "2.0");
-    response.addProperty("id", id);
+    if (id != null) response.add("id", id);
 
     JsonObject result = new JsonObject();
     JsonArray tools = new JsonArray();
@@ -188,10 +200,10 @@ public class McpStdioHandler implements CommandLineRunner {
 
     result.add("tools", tools);
     response.add("result", result);
-    System.out.println(gson.toJson(response));
+    sendResponse(response);
   }
 
-  private void handleToolsCall(String id, JsonObject params) {
+  private void handleToolsCall(JsonElement id, JsonObject params) {
     String name = params.get("name").getAsString();
     JsonObject args = params.getAsJsonObject("arguments");
 
@@ -225,6 +237,9 @@ public class McpStdioHandler implements CommandLineRunner {
       return;
     }
 
+    // Wait for client to connect if needed (race condition handling)
+    webSocketHandler.waitForConnection(30, TimeUnit.SECONDS);
+
     // Send to WebSocket and wait
     CompletableFuture<WebsocketMessage> future = webSocketHandler.sendRequest(msgBuilder.build(), requestId);
 
@@ -233,7 +248,7 @@ public class McpStdioHandler implements CommandLineRunner {
 
       JsonObject response = new JsonObject();
       response.addProperty("jsonrpc", "2.0");
-      response.addProperty("id", id);
+      if (id != null) response.add("id", id);
 
       JsonObject result = new JsonObject();
       JsonArray content = new JsonArray();
@@ -260,18 +275,26 @@ public class McpStdioHandler implements CommandLineRunner {
 
       result.add("content", content);
       response.add("result", result);
-      System.out.println(gson.toJson(response));
+      sendResponse(response);
 
     } catch (Exception e) {
       // Timeout or error
       JsonObject response = new JsonObject();
       response.addProperty("jsonrpc", "2.0");
-      response.addProperty("id", id);
+      if (id != null) response.add("id", id);
       JsonObject error = new JsonObject();
       error.addProperty("code", -32603);
       error.addProperty("message", "Internal error: " + e.getMessage());
       response.add("error", error);
-      System.out.println(gson.toJson(response));
+      sendResponse(response);
     }
+  }
+
+  private void sendResponse(JsonObject response) {
+    String json = gson.toJson(response);
+    log("Sending MCP response: " + json);
+    // Write raw UTF-8 bytes to stdout
+    stdoutWriter.println(json);
+    stdoutWriter.flush();
   }
 }
