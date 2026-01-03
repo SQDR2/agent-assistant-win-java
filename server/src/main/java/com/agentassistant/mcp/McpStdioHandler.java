@@ -22,9 +22,63 @@ public class McpStdioHandler implements CommandLineRunner {
     this.webSocketHandler = webSocketHandler;
   }
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private org.springframework.core.env.Environment environment;
+
   @Override
   public void run(String... args) throws Exception {
+    String port = environment.getProperty("local.server.port");
+    System.err.println("McpStdioHandler running. Web Server port: " + port);
+    
     new Thread(this::readStdio).start();
+    
+    // Attempt to start the client
+    startClient();
+  }
+
+  private void startClient() {
+    try {
+        // Common paths to search for the client executable relative to the server execution directory
+        // We assume we might be running from server/ or project root
+        String[] possiblePaths = {
+            "../client/build/windows/x64/runner/Release/client.exe",
+            "client/build/windows/x64/runner/Release/client.exe",
+            "../client/build/windows/runner/Release/client.exe",
+            "client/build/windows/runner/Release/client.exe",
+            // Absolute path fallback for typical project structure on Windows
+            "e:/CodeProject/agent-assistant-win-java/client/build/windows/x64/runner/Release/client.exe",
+            "e:/CodeProject/agent-assistant-win-java/client/build/windows/runner/Release/client.exe"
+        };
+
+        java.io.File clientExe = null;
+        System.err.println("Searching for client executable...");
+        System.err.println("Current working directory: " + System.getProperty("user.dir"));
+
+        for (String path : possiblePaths) {
+            java.io.File f = new java.io.File(path);
+            System.err.println("Checking path: " + f.getAbsolutePath());
+            if (f.exists()) {
+                clientExe = f;
+                System.err.println("Found client at: " + f.getAbsolutePath());
+                break;
+            }
+        }
+
+        if (clientExe != null) {
+            // Start the client process
+            System.err.println("Starting client process...");
+            new ProcessBuilder(clientExe.getAbsolutePath())
+                .start();
+            System.err.println("Client process started.");
+        } else {
+            System.err.println("Could not find client executable in any of the expected locations.");
+        }
+    } catch (Exception e) {
+        // Ignore errors starting client, we don't want to crash or pollute stdout if we can avoid it
+        // Since logging is off for stdout, we could log to stderr if needed
+        System.err.println("Failed to auto-launch client: " + e.getMessage());
+        e.printStackTrace();
+    }
   }
 
   private void readStdio() {
